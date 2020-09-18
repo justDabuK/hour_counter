@@ -2,8 +2,14 @@ import xlrd
 import os
 import sys
 
+# global definitions
 months = ["Januar", "Februar", "Maerz", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober",
           "November", "Dezember"]
+main_page_index = 0
+extra_hour_row = 40
+extra_hour_column = 9
+vacation_days_row = 40
+vacation_days_column = 15
 
 
 def main(dir):
@@ -13,33 +19,58 @@ def main(dir):
     :param dir: directory where the excels lie and the markdown file will land
     """
 
-    # extract months and hours from the excels
-    hour_list = []
+    # extract months, hours and vacation days from the excels
+    hour_list = {}
     for file_name in os.listdir(dir):
         if "xlsm" in file_name and "$" not in file_name:
             wb = xlrd.open_workbook(dir + "/" + file_name)
-            sheet = wb.sheet_by_index(0)
-            hours = sheet.cell(40, 9)
+
+            # the important data is on the first sheet
+            sheet = wb.sheet_by_index(main_page_index)
+            hours = sheet.cell(extra_hour_row, extra_hour_column)
+            vacation_days = sheet.cell(vacation_days_row, vacation_days_column)
+
+            # the returned date tuple is a list of integers, build like [year, month, day]
             date_tuple = xlrd.xldate_as_tuple(sheet.cell(2, 10).value, wb.datemode)
-            hour_list.append((months[date_tuple[1] - 1] + " " + str(date_tuple[0]), hours.value))
+            current_year = str(date_tuple[0])
+
+            # to prevent initializing the dict before hand, we check if an entry for the current year exists and if not
+            # we add one
+            if current_year not in hour_list.keys():
+                hour_list[current_year] = []
+            hour_list[current_year].append((
+                months[date_tuple[1] - 1] + " " + current_year,
+                hours.value,
+                vacation_days.value
+            ))
 
     # write the data into the mardwon file
     output_file = dir + "/" + "Stundendifferenz.md"
-    hour_sum = 0
     with open(output_file, "w") as md_file:
-        lines = ["# Stundendifferenz \n", "\n", "| Monat | Stunden |\n", "| --- | --- |\n"]
+        for current_year in hour_list:
+            hour_sum = 0
+            vacation_sum = 0
 
-        for month, hours in hour_list:
-            lines.append("| " + month + " | " + str(hours) + " |\n")
-            hour_sum += hours
+            lines = ["# Interessante Daten für " + current_year + "\n",
+                     "\n",
+                     "| Monat | Stunden | Urlaubstage |\n",
+                     "| --- | --- | --- |\n"]
 
-        lines.append("\n")
-        lines.append("**Gesamt -> " + str(hour_sum) + "** \n")
+            for month, hours, vacation_days in hour_list[current_year]:
+                lines.append("| " + month + " | " + str(hours) + " | " + str(vacation_days) + " |\n")
+                hour_sum += hours
+                vacation_sum += vacation_days
 
-        md_file.writelines(lines)
+            lines.append("\n")
+            lines.append("**Gesamt Stunden-> " + str(hour_sum) + "** \n")
+            lines.append("\n")
+            lines.append("**Gesamt Urlaubstage-> " + str(vacation_sum) + "** \n")
+            lines.append("\n")
+            lines.append("\n")
+
+            md_file.writelines(lines)
 
     # print some info to please the user
-    print("Sneak Peak: current status -> ", hour_sum)
     print("Wrote into", output_file)
 
 
